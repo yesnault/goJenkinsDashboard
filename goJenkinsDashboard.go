@@ -72,7 +72,7 @@ func resetBox(redbox *ui.Par, yellowbox *ui.Par, greenbox *ui.Par) {
 }
 
 func addJob(list *ui.List, job *gojenkins.Job, redbox *ui.Par, yellowbox *ui.Par, greenbox *ui.Par) {
-	if filterBuildName != nil && filterBuildName.MatchString(job.GetName()) {
+	if filterBuildName == nil || (filterBuildName != nil && filterBuildName.MatchString(job.GetName())) {
 		str := job.GetName()
 		if job.GetLastBuild() != nil {
 			str += " " + " " + job.GetLastBuild().GetResult()
@@ -118,7 +118,7 @@ func computeSizes(list *ui.List, redbox *ui.Par, yellowbox *ui.Par, greenbox *ui
 func initWidgets() (*ui.List, *ui.Par, *ui.Par, *ui.Par, *ui.Par) {
 	ui.UseTheme("Jenkins Term UI")
 
-	title := "q to quit - http://192.168.59.103:10000"
+	title := "q to quit - " + *jenkinsUrl
 	if *filter != "" {
 		title += " filter on " + *filter
 	}
