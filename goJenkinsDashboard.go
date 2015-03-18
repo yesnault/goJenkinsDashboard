@@ -23,7 +23,6 @@ var filterBuildName *regexp.Regexp
 func main() {
 	defer glog.Flush()
 	flag.Parse()
-	glog.Info("Starting Jenkins Term")
 
 	err := ui.Init()
 	if err != nil {
@@ -32,7 +31,7 @@ func main() {
 	defer ui.Close()
 
 	jenkins := gojenkins.CreateJenkins(*jenkinsUrl).Init()
-	ls, p, redbox, yellowbox, greenbox := initWidgets()
+	ls, p, infobox, redbox, yellowbox, greenbox := initWidgets()
 
 	if *filter != "" {
 		filterBuildName = regexp.MustCompile(*filter)
@@ -53,19 +52,33 @@ func main() {
 				return
 			}
 		case <-ticker:
-			jenkins.Poll()
 			ls.Items = ls.Items[:0]
-			resetBox(redbox, yellowbox, greenbox)
-			for _, k := range jenkins.GetAllJobs() {
-				addJob(ls, k, redbox, yellowbox, greenbox)
-			}
+			resetBox(infobox, redbox, yellowbox, greenbox)
+			jenkinsPoll(jenkins, infobox, ls, redbox, yellowbox, greenbox)
 			computeSizes(ls, redbox, yellowbox, greenbox)
-			ui.Render(ls, p, redbox, yellowbox, greenbox)
+			ui.Render(ls, p, infobox, redbox, yellowbox, greenbox)
 		}
 	}
 }
 
-func resetBox(redbox *ui.Par, yellowbox *ui.Par, greenbox *ui.Par) {
+func jenkinsPoll(jenkins *gojenkins.Jenkins, infobox *ui.Par, ls *ui.List, redbox *ui.Par, yellowbox *ui.Par, greenbox *ui.Par) {
+	defer func() {
+		if r := recover(); r != nil {
+			infobox.Border.FgColor = ui.ColorRed
+			//err := fmt.Errorf("%v", r)
+			infobox.Text += " : /!\\ Jenkins is currently unreachable"
+		}
+	}()
+	const layout = "Mon Jan 2 15:04:05"
+	infobox.Border.FgColor = ui.ColorWhite
+	infobox.Text = "Refresh at " + time.Now().Format(layout)
+	jenkins.Poll()
+	for _, k := range jenkins.GetAllJobs() {
+		addJob(ls, k, redbox, yellowbox, greenbox)
+	}
+}
+
+func resetBox(infobox *ui.Par, redbox *ui.Par, yellowbox *ui.Par, greenbox *ui.Par) {
 	redbox.BgColor = ui.ColorBlack
 	yellowbox.BgColor = ui.ColorBlack
 	greenbox.BgColor = ui.ColorBlack
@@ -75,6 +88,9 @@ func addJob(list *ui.List, job *gojenkins.Job, redbox *ui.Par, yellowbox *ui.Par
 	if filterBuildName == nil || (filterBuildName != nil && filterBuildName.MatchString(job.GetName())) {
 		str := job.GetName()
 		if job.GetLastBuild() != nil {
+			if job.IsRunning() {
+				str = "...building " + str
+			}
 			str += " " + " " + job.GetLastBuild().GetResult()
 			switch job.GetLastBuild().GetResult() {
 			case "SUCCESS":
@@ -85,16 +101,14 @@ func addJob(list *ui.List, job *gojenkins.Job, redbox *ui.Par, yellowbox *ui.Par
 				redbox.BgColor = ui.ColorRed
 			}
 		}
-
 		list.Items = append(list.Items, str)
-
 	}
 }
 
 func computeSizes(list *ui.List, redbox *ui.Par, yellowbox *ui.Par, greenbox *ui.Par) {
 	w, h := tm.Size()
 	list.Width = w - 15
-	list.Height = h - 3
+	list.Height = h - 6
 
 	redbox.Height = 5
 	redbox.Width = 15
@@ -115,7 +129,7 @@ func computeSizes(list *ui.List, redbox *ui.Par, yellowbox *ui.Par, greenbox *ui
 
 // TODO make new widget traffic light
 
-func initWidgets() (*ui.List, *ui.Par, *ui.Par, *ui.Par, *ui.Par) {
+func initWidgets() (*ui.List, *ui.Par, *ui.Par, *ui.Par, *ui.Par, *ui.Par) {
 	ui.UseTheme("Jenkins Term UI")
 
 	title := "q to quit - " + *jenkinsUrl
@@ -123,12 +137,19 @@ func initWidgets() (*ui.List, *ui.Par, *ui.Par, *ui.Par, *ui.Par) {
 		title += " filter on " + *filter
 	}
 	p := ui.NewPar(title)
-	w, _ := tm.Size()
+	w, h := tm.Size()
 	p.Height = 3
 	p.Width = w
 	p.TextFgColor = ui.ColorWhite
 	p.Border.Label = "Go Jenkins Dashboard"
 	p.Border.FgColor = ui.ColorCyan
+
+	info := ui.NewPar("")
+	info.Height = 3
+	info.Width = w
+	info.Y = h - 3
+	info.TextFgColor = ui.ColorWhite
+	info.Border.FgColor = ui.ColorWhite
 
 	ls := ui.NewList()
 	ls.ItemFgColor = ui.ColorYellow
@@ -148,5 +169,5 @@ func initWidgets() (*ui.List, *ui.Par, *ui.Par, *ui.Par, *ui.Par) {
 	greenbox.BgColor = ui.ColorGreen
 
 	ui.Render(ls, p, redbox, yellowbox, greenbox)
-	return ls, p, redbox, yellowbox, greenbox
+	return ls, p, info, redbox, yellowbox, greenbox
 }
