@@ -95,7 +95,7 @@ func addJob(list *ui.List, job *gojenkins.Job, redbox *ui.Par, yellowbox *ui.Par
 			switch job.GetLastBuild().GetResult() {
 			case "SUCCESS":
 				greenbox.BgColor = ui.ColorGreen
-			case "WARNING":
+			case "UNSTABLE":
 				yellowbox.BgColor = ui.ColorYellow
 			case "FAILURE":
 				redbox.BgColor = ui.ColorRed
