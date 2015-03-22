@@ -31,7 +31,7 @@ func main() {
 	defer ui.Close()
 
 	jenkins := gojenkins.CreateJenkins(*jenkinsUrl).Init()
-	ls, p, infobox, redbox, yellowbox, greenbox := initWidgets()
+	ls, infobox, redbox, yellowbox, greenbox := initWidgets()
 
 	if *filter != "" {
 		filterBuildName = regexp.MustCompile(*filter)
@@ -52,13 +52,21 @@ func main() {
 				return
 			}
 		case <-ticker:
+			// alway resize, strange behaviour with tm.EventResize
+			resizeUI(ls)
 			ls.Items = ls.Items[:0]
 			resetBox(infobox, redbox, yellowbox, greenbox)
 			jenkinsPoll(jenkins, infobox, ls, redbox, yellowbox, greenbox)
-			computeSizes(ls, redbox, yellowbox, greenbox)
-			ui.Render(ls, p, infobox, redbox, yellowbox, greenbox)
+			ui.Render(ui.Body)
 		}
 	}
+}
+
+func resizeUI(ls *ui.List) {
+	w, h := tm.Size()
+	ui.Body.Width = w
+	ls.Height = h - 6
+	ui.Body.Align()
 }
 
 func jenkinsPoll(jenkins *gojenkins.Jenkins, infobox *ui.Par, ls *ui.List, redbox *ui.Par, yellowbox *ui.Par, greenbox *ui.Par) {
@@ -105,31 +113,9 @@ func addJob(list *ui.List, job *gojenkins.Job, redbox *ui.Par, yellowbox *ui.Par
 	}
 }
 
-func computeSizes(list *ui.List, redbox *ui.Par, yellowbox *ui.Par, greenbox *ui.Par) {
-	w, h := tm.Size()
-	list.Width = w - 15
-	list.Height = h - 6
-
-	redbox.Height = 5
-	redbox.Width = 15
-	redbox.X = w - 15
-	redbox.Y = 3
-
-	yellowbox.Height = 5
-	yellowbox.Width = 15
-	yellowbox.X = w - 15
-	yellowbox.Y = 8
-
-	greenbox.Height = 5
-	greenbox.Width = 15
-	greenbox.X = w - 15
-	greenbox.Y = 13
-
-}
-
 // TODO make new widget traffic light
-
-func initWidgets() (*ui.List, *ui.Par, *ui.Par, *ui.Par, *ui.Par, *ui.Par) {
+// Waiting for canvas from termui
+func initWidgets() (*ui.List, *ui.Par, *ui.Par, *ui.Par, *ui.Par) {
 	ui.UseTheme("Jenkins Term UI")
 
 	title := "q to quit - " + *jenkinsUrl
@@ -137,16 +123,14 @@ func initWidgets() (*ui.List, *ui.Par, *ui.Par, *ui.Par, *ui.Par, *ui.Par) {
 		title += " filter on " + *filter
 	}
 	p := ui.NewPar(title)
-	w, h := tm.Size()
+	_, h := tm.Size()
 	p.Height = 3
-	p.Width = w
 	p.TextFgColor = ui.ColorWhite
 	p.Border.Label = "Go Jenkins Dashboard"
 	p.Border.FgColor = ui.ColorCyan
 
 	info := ui.NewPar("")
 	info.Height = 3
-	info.Width = w
 	info.Y = h - 3
 	info.TextFgColor = ui.ColorWhite
 	info.Border.FgColor = ui.ColorWhite
@@ -155,19 +139,30 @@ func initWidgets() (*ui.List, *ui.Par, *ui.Par, *ui.Par, *ui.Par, *ui.Par) {
 	ls.ItemFgColor = ui.ColorYellow
 	ls.Border.Label = "Jobs"
 	ls.Y = 3
+	ls.Height = h - 6
 
-	redbox := ui.NewPar("")
-	redbox.Border.Label = "Failure"
+	width, height := 4, 5
+	redbox, yellowbox, greenbox := ui.NewPar(""), ui.NewPar(""), ui.NewPar("")
+	redbox.HasBorder, yellowbox.HasBorder, greenbox.HasBorder = false, false, false
+	redbox.Height, yellowbox.Height, greenbox.Height = height, height, height
+	redbox.Width, yellowbox.Width, greenbox.Width = width, width, width
 	redbox.BgColor = ui.ColorRed
-
-	yellowbox := ui.NewPar("")
-	yellowbox.Border.Label = "Warning"
 	yellowbox.BgColor = ui.ColorYellow
-
-	greenbox := ui.NewPar("")
-	greenbox.Border.Label = "Success"
 	greenbox.BgColor = ui.ColorGreen
 
-	ui.Render(ls, p, redbox, yellowbox, greenbox)
-	return ls, p, info, redbox, yellowbox, greenbox
+	ui.Body.AddRows(
+		ui.NewRow(
+			ui.NewCol(12, 0, p),
+		),
+		ui.NewRow(
+			ui.NewCol(10, 0, ls),
+			ui.NewCol(2, 0, redbox, yellowbox, greenbox),
+		),
+		ui.NewRow(
+			ui.NewCol(12, 0, info),
+		),
+	)
+	ui.Body.Align()
+	ui.Render(ui.Body)
+	return ls, info, redbox, yellowbox, greenbox
 }
