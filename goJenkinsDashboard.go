@@ -2,12 +2,14 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"regexp"
+	"time"
+
 	"github.com/bndr/gojenkins"
 	ui "github.com/gizak/termui"
 	"github.com/golang/glog"
 	tm "github.com/nsf/termbox-go"
-	"regexp"
-	"time"
 )
 
 func init() {
@@ -30,7 +32,10 @@ func main() {
 	}
 	defer ui.Close()
 
-	jenkins := gojenkins.CreateJenkins(*jenkinsUrl).Init()
+	jenkins, err := gojenkins.CreateJenkins(*jenkinsUrl).Init()
+	if err != nil {
+		panic(err)
+	}
 	ls, infobox, redbox, yellowbox, greenbox := initWidgets()
 
 	if *filter != "" {
@@ -81,7 +86,11 @@ func jenkinsPoll(jenkins *gojenkins.Jenkins, infobox *ui.Par, ls *ui.List, redbo
 	infobox.Border.FgColor = ui.ColorWhite
 	infobox.Text = "Refresh at " + time.Now().Format(layout)
 	jenkins.Poll()
-	for _, k := range jenkins.GetAllJobs() {
+	jobs, err := jenkins.GetAllJobs()
+	if err != nil {
+		infobox.Text = "Error with getAllJobs " + fmt.Sprintf("%s", err)
+	}
+	for _, k := range jobs {
 		addJob(ls, k, redbox, yellowbox, greenbox)
 	}
 }
@@ -95,12 +104,14 @@ func resetBox(infobox *ui.Par, redbox *ui.Par, yellowbox *ui.Par, greenbox *ui.P
 func addJob(list *ui.List, job *gojenkins.Job, redbox *ui.Par, yellowbox *ui.Par, greenbox *ui.Par) {
 	if filterBuildName == nil || (filterBuildName != nil && filterBuildName.MatchString(job.GetName())) {
 		str := job.GetName()
-		if job.GetLastBuild() != nil {
-			if job.IsRunning() {
+		lastBuild, _ := job.GetLastBuild()
+		if lastBuild != nil {
+			isRunning, _ := job.IsRunning()
+			if isRunning {
 				str = "...building " + str
 			}
-			str += " " + " " + job.GetLastBuild().GetResult()
-			switch job.GetLastBuild().GetResult() {
+			str += " " + " " + lastBuild.GetResult()
+			switch lastBuild.GetResult() {
 			case "SUCCESS":
 				greenbox.BgColor = ui.ColorGreen
 			case "UNSTABLE":
